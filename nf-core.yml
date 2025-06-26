@@ -1,0 +1,29 @@
+name: nf-core/snp_clustering
+description: Pipeline for SNP-based unsupervised clustering using PCA, t-SNE, and K-Means
+keywords:
+  - SNP
+  - PCA
+  - t-SNE
+  - clustering
+  - genotyping
+  - population genetics
+maintainers:
+  - github: dbaku42
+author: Donald Baku
+license: MIT
+version: 1.0.0
+nextflow_version: '>=21.04.0'
+tags:
+  - clustering
+  - vcf
+  - population
+  - genotyping
+  - pca
+  - tsne
+  - kmeans
+tools:
+  - scikit-allel
+  - numpy
+  - pandas
+  - scikit-learn
+  - matplotlib
