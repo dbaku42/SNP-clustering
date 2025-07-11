@@ -19,18 +19,19 @@ process extract_genotype_matrix {
     path vcf_file
 
     output:
-    path "genotype_matrix.npy"   emit: genotype_matrix
-    path "samples.txt"           emit: samples_list
-    path "variants_filtered.txt" emit: variants_list
+    path "genotype_matrix.npy", emit: genotype_matrix
+    path "samples.txt", emit: samples_list
+    path "variants_filtered.txt", emit: variants_list
 
     script:
     """
     #!/usr/bin/env python
     import allel
     import numpy as np
+    import pandas as pd
 
-    print(f"Processing VCF file: {vcf_file}")
-    vcf = allel.read_vcf(f"{vcf_file}", fields=['calldata/GT', 'variants/ID', 'samples'])
+    print(f"Processing VCF file: ${vcf_file}")
+    vcf = allel.read_vcf("${vcf_file}", fields=['calldata/GT', 'variants/ID', 'samples'])
     gt = allel.GenotypeArray(vcf['calldata/GT'])
     gm = gt.to_n_alt(1)
     print(f"Initial genotype matrix shape: {gm.shape}")
@@ -66,6 +67,7 @@ process extract_genotype_matrix {
 
     with open("variants_filtered.txt", "w") as f:
         for variant_id in variants_final: f.write(f"{variant_id}\\n")
+    del vcf
     """
 }
 
@@ -82,7 +84,7 @@ process perform_pca {
     path samples_list
 
     output:
-    path "pca_coords.csv" emit: pca_results_csv
+    path "pca_coords.csv", emit: pca_results_csv
 
     script:
     """
@@ -92,8 +94,8 @@ process perform_pca {
     from sklearn.decomposition import PCA
     from sklearn.preprocessing import StandardScaler
 
-    gm = np.load(f"{genotype_matrix}")
-    samples = pd.read_csv(f"{samples_list}", header=None)[0].tolist()
+    gm = np.load("${genotype_matrix}")
+    samples = pd.read_csv("${samples_list}", header=None)[0].tolist()
     
     gm_transposed = gm.T
     scaler = StandardScaler()
@@ -129,9 +131,9 @@ process perform_clustering {
     path pca_results_csv
 
     output:
-    path "cluster_assignments.csv" emit: cluster_assignments_csv
-    path "elbow_plot.png"          emit: elbow_plot
-    path "pca_clustered_plot.png"  emit: pca_clustered_plot
+    path "cluster_assignments.csv", emit: cluster_assignments_csv
+    path "elbow_plot.png", emit: elbow_plot
+    path "pca_clustered_plot.png", emit: pca_clustered_plot
 
     script:
     """
@@ -140,7 +142,7 @@ process perform_clustering {
     import matplotlib.pyplot as plt
     from sklearn.cluster import KMeans
 
-    pca_df = pd.read_csv(f"{pca_results_csv}", index_col="SampleID")
+    pca_df = pd.read_csv("${pca_results_csv}", index_col="SampleID")
 
     # --- Elbow Method to find optimal K ---
     # Use the first 10 PCs or fewer if not available
@@ -199,8 +201,8 @@ process perform_tsne_visualization {
     path cluster_assignments_csv
 
     output:
-    path "tsne_coords.csv"      emit: tsne_results_csv
-    path "tsne_clustered_plot.png" emit: tsne_plot
+    path "tsne_coords.csv", emit: tsne_results_csv
+    path "tsne_clustered_plot.png", emit: tsne_plot
 
     script:
     """
@@ -209,8 +211,8 @@ process perform_tsne_visualization {
     import matplotlib.pyplot as plt
     from sklearn.manifold import TSNE
 
-    pca_df = pd.read_csv(f"{pca_results_csv}", index_col="SampleID")
-    cluster_df = pd.read_csv(f"{cluster_assignments_csv}", index_col="SampleID")
+    pca_df = pd.read_csv("${pca_results_csv}", index_col="SampleID")
+    cluster_df = pd.read_csv("${cluster_assignments_csv}", index_col="SampleID")
     
     # Align data before t-SNE
     data = pca_df.join(cluster_df)
@@ -218,7 +220,7 @@ process perform_tsne_visualization {
     n_samples = len(data)
     perplexity_value = min(30.0, n_samples - 1.0)
     
-    tsne = TSNE(n_components=2, perplexity=perplexity_value, n_iter=1000, learning_rate='auto', init='pca', random_state=42)
+    tsne = TSNE(n_components=2, perplexity=perplexity_value, learning_rate='auto', random_state=42)
     tsne_coords = tsne.fit_transform(data.iloc[:, :-1]) # Use PCA coords for t-SNE
 
     tsne_df = pd.DataFrame(tsne_coords, columns=["tSNE1", "tSNE2"], index=data.index)
@@ -239,14 +241,14 @@ process perform_tsne_visualization {
     """
 }
 
-
 /*
 ========================================================================================
     Workflow Definition
 ========================================================================================
 */
 workflow {
-    vcf_ch = file(params.vcf_file)
+    // Define input channel
+    vcf_ch = Channel.fromPath(params.vcf_file, checkIfExists: true)
 
     // 1. Extract and filter genotype data
     extract_genotype_matrix(vcf_ch)
